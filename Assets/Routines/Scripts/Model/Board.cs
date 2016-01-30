@@ -8,10 +8,10 @@ namespace GGJ2016.Routines.Model {
 	public class Board {
 
 		protected Card[][] _cards = null;
-		//public Card[][] Cards {
-		//	get { return _cards; }
+		public Card[][] Cards {
+			get { return _cards; }
 			//set { _cards = value; }
-		//}// property
+		}// property
 
 		protected int _rows = 3;
 		public int Rows {

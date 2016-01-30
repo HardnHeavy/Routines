@@ -62,6 +62,10 @@ namespace GGJ2016.Routines.Model {
 			_cardsInReserve = new List<Card> ();
 			_cardsInPlay = new List<Card> ();
 
+			GenerateDeck ();
+
+			DbgOut.Log ("New Deck created.");
+
 		}// Card
 
 
@@ -102,6 +106,13 @@ namespace GGJ2016.Routines.Model {
 			_cardsInReserve.Add (card);
 			_cardsInPlay.Remove (card);
 		}// ReturnCard
+
+
+
+		public void ReturnAllCards(){
+			_cardsInReserve.AddRange (_cardsInPlay);
+			_cardsInPlay.Clear ();
+		}// ReturnAllCards
 
 
 	}// class
