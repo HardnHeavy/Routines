@@ -68,6 +68,19 @@ namespace com.Jireugi.U3DExtension {
 			return true;
 		}// TryPress
 
+
+
+		public void AddSetup(KeyCode key, float timeReset){
+			WaitingForKey wait = null;
+			if (_setup.ContainsKey (key)) {
+				wait = _setup [key];
+			} else {
+				wait = new WaitingForKey (timeReset);
+				_setup.Add (key, wait);
+			}// fi
+			wait.TimeReset = timeReset;
+		}// AddSetup
+
 	}// class
 
 }// namespace

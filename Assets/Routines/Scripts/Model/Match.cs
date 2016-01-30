@@ -2,6 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 
+using com.Jireugi.U3DExtension;
+
 namespace GGJ2016.Routines.Model {
 
 	public class Match {
@@ -73,7 +75,7 @@ namespace GGJ2016.Routines.Model {
 				_players [i] = new Player (_deck, cardsPerPlayer);
 			}// for
 
-			_playerAction = 0;
+			_playerAction = MathHelper.Rand.Next (playerCount);
 
 			_winner = -1;
 

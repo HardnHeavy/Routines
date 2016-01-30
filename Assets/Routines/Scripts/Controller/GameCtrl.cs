@@ -15,10 +15,6 @@ namespace GGJ2016.Routines.Controller {
 		}// Get
 
 		#region Match management
-		protected Match _match = null;
-
-		protected bool _matchRunning = false;
-
 
 		#region Match Parameters
 		public int ParamPlayerCount = 4;
@@ -34,6 +30,10 @@ namespace GGJ2016.Routines.Controller {
 		public bool ParamCardColorForbiddenYellow = false;
 		#endregion Match Parameters
 
+		protected Match _match = null;
+
+		protected bool _matchRunning = false;
+
 		#endregion Match management
 
 
@@ -41,6 +41,8 @@ namespace GGJ2016.Routines.Controller {
 		#region View data
 
 		public GameObject PrefabCard = null;
+
+
 
 		// This is the parent object for all cards (and perhaps other items?) on the board.
 		public GameObject ParentBoard = null;
@@ -54,6 +56,7 @@ namespace GGJ2016.Routines.Controller {
 		protected CardView[][] _cardViewsBoard = null;
 
 
+
 		// These are the parent objects for all cards (and perhaps other items?) of each player.
 		public GameObject[] ParentPlayerHands = null;
 
@@ -64,6 +67,21 @@ namespace GGJ2016.Routines.Controller {
 		public Vector3 CardPlayerHandOffset = Vector3.one;
 
 		public CardView[][] _cardViewsPerPlayer = null;
+
+
+
+		// GameObjects that define the position and rotation to be applied to the camera when it looks into the hand of a player.
+		public GameObject[] CamPosPlayers = null;
+
+		public GameObject CamPosBoard = null;
+
+		public float TimeCamFlights = 1.0f;
+		protected Vector3 _camFlightStartPos = Vector3.zero;
+		protected Vector3 _camFlightStartRot = Vector3.zero;
+		protected Vector3 _camFlightTargetPos = Vector3.zero;
+		protected Vector3 _camFlightTargetRot = Vector3.zero;
+		protected float _camFlightTimeLeft = 0.0f;
+		protected bool _camFlightActive = false;
 
 		#endregion View data
 
@@ -93,6 +111,7 @@ namespace GGJ2016.Routines.Controller {
 			//DbgOut.LogEnable = false;
 
 			_keys = this.gameObject.GetComponent<KeyDebouncer> ();
+			_keys.AddSetup (KeyCode.Return, TimeCamFlights);
 
 		}// Awake
 
@@ -107,14 +126,18 @@ namespace GGJ2016.Routines.Controller {
 		}// Start
 
 		
-		//protected void Update () {
-		//}
+		protected void Update () {
+			DoCameraFlight();
+		}// Update
 
 
 
 		protected void LateUpdate() {
 			if (Input.GetKeyDown(KeyCode.Space) && _keys.TryPress(KeyCode.Space)) {
 				BeginMatch ();
+			}// fi
+
+			if (Input.GetKeyDown (KeyCode.Return) && _keys.TryPress (KeyCode.Return)) {
 			}// fi
 		}// LateUpdate
 
@@ -200,11 +223,16 @@ namespace GGJ2016.Routines.Controller {
 
 			FillBoard ();
 
-
+			ApplyCamPosition (CamPosPlayers[_match.PlayerAction]);
 
 			_matchRunning = true;
 
 		}// BeginMatch
+
+
+		protected void PrepareTurn(){
+			// TODO
+		}// PrepareTurn
 
 
 
@@ -258,6 +286,35 @@ namespace GGJ2016.Routines.Controller {
 				}// for
 			}// for
 		}// FillBoard
+
+
+
+		protected void ApplyCamPosition(GameObject camPosition){
+			_camFlightStartPos = Camera.main.transform.position;
+			_camFlightStartRot = Camera.main.transform.rotation.eulerAngles;
+			_camFlightTargetPos = camPosition.transform.position;
+			_camFlightTargetRot = camPosition.transform.rotation.eulerAngles;
+			_camFlightTimeLeft = TimeCamFlights;
+
+			_camFlightActive = true;
+		}// ApplyCamPosition
+
+
+
+		protected void DoCameraFlight(){
+			if (!_camFlightActive)
+				return;
+
+			_camFlightTimeLeft -= Time.deltaTime;
+			if (_camFlightTimeLeft <= 0.0f) {
+				_camFlightTimeLeft = 0.0f;
+				_camFlightActive = false;
+			}// fi
+			float share = (TimeCamFlights - _camFlightTimeLeft) / TimeCamFlights;
+
+			Camera.main.transform.position = Vector3.Lerp(_camFlightStartPos, _camFlightTargetPos, share);
+			Camera.main.transform.rotation = Quaternion.Euler( Vector3.Lerp(_camFlightStartRot, _camFlightTargetRot, share));
+		}// DoCameraFlight
 
 		#endregion view management
 			
