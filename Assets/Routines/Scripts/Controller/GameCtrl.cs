@@ -75,13 +75,20 @@ namespace GGJ2016.Routines.Controller {
 
 		public GameObject CamPosBoard = null;
 
-		public float TimeCamFlights = 1.0f;
+		public float TimeCamFlightNextPlayer = 1.0f;
+		public float TimeCamFlightBoard = 0.25f;
 		protected Vector3 _camFlightStartPos = Vector3.zero;
 		protected Vector3 _camFlightStartRot = Vector3.zero;
 		protected Vector3 _camFlightTargetPos = Vector3.zero;
 		protected Vector3 _camFlightTargetRot = Vector3.zero;
+		protected float _camFlightTimeTotal = 0.0f;
 		protected float _camFlightTimeLeft = 0.0f;
 		protected bool _camFlightActive = false;
+
+		protected GameObject _camPosCurrent = null;
+		protected GameObject _camPosStashed = null;
+
+		protected bool _camPosBoardActive = false;
 
 		#endregion View data
 
@@ -110,14 +117,15 @@ namespace GGJ2016.Routines.Controller {
 
 			//DbgOut.LogEnable = false;
 
-			_keys = this.gameObject.GetComponent<KeyDebouncer> ();
-			_keys.AddSetup (KeyCode.Return, TimeCamFlights);
-
+			_camPosCurrent = CamPosPlayers [0];
 		}// Awake
 
 
 
 		protected void Start() {
+
+			_keys = this.gameObject.GetComponent<KeyDebouncer> ();
+			_keys.AddSetup (KeyCode.Return, 0.1f);
 
 			CreateInfrastructure();
 
@@ -137,7 +145,17 @@ namespace GGJ2016.Routines.Controller {
 				BeginMatch ();
 			}// fi
 
-			if (Input.GetKeyDown (KeyCode.Return) && _keys.TryPress (KeyCode.Return)) {
+			if (Input.GetKey (KeyCode.Return)){// && _keys.TryPress (KeyCode.Return)) {
+				if (!_camPosBoardActive) {
+					_camPosBoardActive = true;
+					_camPosStashed = _camPosCurrent;
+					ApplyCamPosition (CamPosBoard, TimeCamFlightBoard);
+				}// fi
+			} else {
+				if (_camPosBoardActive) {
+					ApplyCamPosition (_camPosStashed, TimeCamFlightBoard);
+					_camPosBoardActive = false;
+				}// fi
 			}// fi
 		}// LateUpdate
 
@@ -223,7 +241,8 @@ namespace GGJ2016.Routines.Controller {
 
 			FillBoard ();
 
-			ApplyCamPosition (CamPosPlayers[_match.PlayerAction]);
+			_camPosCurrent = CamPosPlayers [_match.PlayerAction];
+			ApplyCamPosition (_camPosCurrent, TimeCamFlightNextPlayer);
 
 			_matchRunning = true;
 
@@ -289,14 +308,18 @@ namespace GGJ2016.Routines.Controller {
 
 
 
-		protected void ApplyCamPosition(GameObject camPosition){
+		protected void ApplyCamPosition(GameObject camPosition, float time){
+			_camFlightTimeLeft = time;
 			_camFlightStartPos = Camera.main.transform.position;
 			_camFlightStartRot = Camera.main.transform.rotation.eulerAngles;
 			_camFlightTargetPos = camPosition.transform.position;
 			_camFlightTargetRot = camPosition.transform.rotation.eulerAngles;
-			_camFlightTimeLeft = TimeCamFlights;
+			_camFlightTimeTotal = time;
+			_camFlightTimeLeft = time;
 
 			_camFlightActive = true;
+
+			_camPosCurrent = camPosition;
 		}// ApplyCamPosition
 
 
@@ -310,7 +333,7 @@ namespace GGJ2016.Routines.Controller {
 				_camFlightTimeLeft = 0.0f;
 				_camFlightActive = false;
 			}// fi
-			float share = (TimeCamFlights - _camFlightTimeLeft) / TimeCamFlights;
+			float share = (_camFlightTimeTotal - _camFlightTimeLeft) / _camFlightTimeTotal;
 
 			Camera.main.transform.position = Vector3.Lerp(_camFlightStartPos, _camFlightTargetPos, share);
 			Camera.main.transform.rotation = Quaternion.Euler( Vector3.Lerp(_camFlightStartRot, _camFlightTargetRot, share));
