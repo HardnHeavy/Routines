@@ -1,0 +1,14 @@
+Credits for "Routines"
+
+All art, code and design done by Markus Wellmann and Harry Trautmann
+for the Global Game Jam 2016 (29. Jan. to 31. Jan.)
+
+Except the following external assets:
+
+Fonts
+"Brassiere Font Family" consisting of
+	"brassiere.line.ttf"
+	"brassiere.regular.ttf"
+	"brassiere.seethru.ttf"
+	from http://www.1001fonts.com/brassiere-font.html
+	available free for commercial use via the "1001fonts.com license"
