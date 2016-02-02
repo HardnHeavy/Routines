@@ -14,17 +14,41 @@ namespace GGJ2016.Routines.Model {
 			//set { _cards = value; }
 		}// property
 
+		protected Routine _routine = null;
+		public Routine Routine {
+			get { return _routine; }
+			set { _routine = value; }
+		}// property
+
 		protected Deck _deck = null;
 
+		protected int _index = -1;
+		public int Index {
+			get { return _index; }
+			set { _index = value; }
+		}// property
+
+		protected bool _didChangeRoutine = false;
+		public bool DidChangeRoutine {
+			get { return _didChangeRoutine; }
+			set { _didChangeRoutine = value; }
+		}// property
 
 
-		public Player(Deck deck, int cardsInitially){
+
+		public Player(int index, Deck deck, int cardsInitially){
+			_index = index;
+
 			_deck = deck;
 
 			_cards = new List<Card>();
 			for (int i = 0; i < cardsInitially; i++) {
-				_cards.Add (_deck.DrawCard());
+				Card card = _deck.DrawCard ();
+				card.Position = _index;
+				_cards.Add (card);
 			}// for
+
+			_didChangeRoutine = false;
 
 		}// Player
 

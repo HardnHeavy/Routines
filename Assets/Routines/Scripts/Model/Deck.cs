@@ -64,7 +64,7 @@ namespace GGJ2016.Routines.Model {
 
 			GenerateDeck ();
 
-			DbgOut.Log ("New Deck created.");
+			//DbgOut.Log ("New Deck created.");
 
 		}// Card
 
@@ -79,7 +79,7 @@ namespace GGJ2016.Routines.Model {
 
 				for (int setCount = 0; setCount < _setsPerColor; setCount++){
 					for (int val = _minValue; val <= _maxValue; val++) {
-						_cardsInReserve.Add(new Card(color, val));
+						_cardsInReserve.Add(new Card(color, val, Card.POSITION_RESERVE));
 					}// for
 				}// for
 					
@@ -103,6 +103,7 @@ namespace GGJ2016.Routines.Model {
 
 
 		public void ReturnCard(Card card){
+			card.Position = Card.POSITION_RESERVE;
 			_cardsInReserve.Add (card);
 			_cardsInPlay.Remove (card);
 		}// ReturnCard
@@ -110,7 +111,10 @@ namespace GGJ2016.Routines.Model {
 
 
 		public void ReturnAllCards(){
-			_cardsInReserve.AddRange (_cardsInPlay);
+			foreach (Card card in _cardsInPlay) {
+				_cardsInReserve.Add (card);
+				card.Position = Card.POSITION_RESERVE;
+			}// foreach
 			_cardsInPlay.Clear ();
 		}// ReturnAllCards
 

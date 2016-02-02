@@ -29,6 +29,15 @@ namespace GGJ2016.Routines.Model {
 			//set { _deck = value; }
 		}// property
 
+		protected List<Routine> _allRoutines = null;
+		public List<Routine> AllRoutines {
+			get { return _allRoutines; }
+			//set { _allRoutines = value; }
+		}// property
+
+		protected List<Routine> _routinesInReserve = null;
+		protected List<Routine> _routinesInPlay = null;
+
 		#endregion infrastructure
 
 
@@ -40,6 +49,13 @@ namespace GGJ2016.Routines.Model {
 		public int PlayerAction {
 			get { return _playerAction; }
 			set { _playerAction = value; }
+		}// property
+
+		// true: player needs to draw a card; false: player does not need to draw a card.
+		protected bool _playerMustDraw = false;
+		public bool PlayerMustDraw {
+			get { return _playerMustDraw; }
+			set { _playerMustDraw = value; }
 		}// property
 
 		protected int _winner = -1;
@@ -72,7 +88,7 @@ namespace GGJ2016.Routines.Model {
 
 			_players = new Player[_playercount];
 			for (int i = 0; i < _playercount; i++) {
-				_players [i] = new Player (_deck, cardsPerPlayer);
+				_players [i] = new Player (i, _deck, cardsPerPlayer);
 			}// for
 
 			_playerAction = MathHelper.Rand.Next (playerCount);
@@ -81,6 +97,11 @@ namespace GGJ2016.Routines.Model {
 
 			_board = new Board (boardrows, boardcolumns);
 
+			_playerMustDraw = false;
+
+			_allRoutines = new List<Routine> ();
+			_routinesInReserve = new List<Routine> ();
+			_routinesInPlay = new List<Routine> ();
 
 		}// Match
 
@@ -91,6 +112,43 @@ namespace GGJ2016.Routines.Model {
 				return null;
 			return _players [index];
 		}// GetPlayer
+
+
+
+		public void AddNewRoutine(Routine routine){
+			_routinesInReserve.Add (routine);
+			_allRoutines.Add (routine);
+		}// AddNewRoutine
+
+
+
+		public Routine DrawRoutine(){
+			Routine routine = null;
+
+			if (_routinesInReserve.Count > 0) {
+				routine = _routinesInReserve [MathHelper.Rand.Next (_routinesInReserve.Count)];
+				_routinesInReserve.Remove (routine);
+				_routinesInPlay.Add (routine);
+			}// fi
+
+			return routine;
+		}// DrawRoutine
+
+
+
+		public void ReturnRoutine(Routine routine){
+			_routinesInReserve.Add (routine);
+			_routinesInPlay.Remove (routine);
+		}// ReturnRoutine
+
+
+
+		public void ReturnAllRoutines(){
+			foreach (Routine routine in _routinesInPlay) {
+				_routinesInReserve.Add (routine);
+			}// foreach
+			_routinesInPlay.Clear ();
+		}// ReturnAllRoutines
 
 
 	}// class

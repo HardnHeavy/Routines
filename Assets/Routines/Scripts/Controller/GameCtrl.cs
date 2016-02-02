@@ -3,8 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 
 using com.Jireugi.U3DExtension;
+using com.Jireugi.U3DExtension.UI;
 
 using GGJ2016.Routines.Model;
+using GGJ2016.Routines.View;
 
 namespace GGJ2016.Routines.Controller {
 	public class GameCtrl : MonoBehaviour {
@@ -33,6 +35,12 @@ namespace GGJ2016.Routines.Controller {
 		protected Match _match = null;
 
 		protected bool _matchRunning = false;
+
+		#region Rules
+		protected Card _lastPlayedCard = null;
+		protected int _lastBoardColumn = -1;
+		protected int _lastBoardRow = -1;
+		#endregion Rules
 
 		#endregion Match management
 
@@ -90,12 +98,59 @@ namespace GGJ2016.Routines.Controller {
 
 		protected bool _camPosBoardActive = false;
 
+		#region UI
+
+		public GameObject BtnMainOptionsVisible = null;
+		protected bool _mainOptionsVisible = false;
+		public GameObject GameLogo = null;
+		public GameObject BtnInstructions = null;
+		public GameObject BtnBeginNewMatch = null;
+		public GameObject BtnAbout = null;
+		public UIExtHasText TxtLargeText = null;
+
+		public GameObject BtnChangeRoutine = null;
+		public GameObject BtnGuessRoutine = null;
+		public GameObject BtnDrawCard = null;
+		protected bool _showMyRoutine = false;
+		public GameObject BtnMyRoutine = null;
+		protected bool _showAllRoutines = false;
+		public GameObject BtnAllRoutines = null;
+		public UIExtHasText TxtSingleRoutine = null;
+		public UIExtHasText TxtStatus = null;
+		public UIExtHasText TxtInstructDrawCard = null;
+
+		protected bool _guessRoutinePlayerVisible = false;
+		protected bool _guessRoutineSelectVisible = false;
+		protected int _guessPlayerId = -1;
+		protected Routine _guessRoutine = null;
+		public UIExtHasText TxtInstructGuessRoutine = null;
+		public GameObject BtnGuess1 = null;
+		public GameObject BtnGuess2 = null;
+		public GameObject BtnGuess3 = null;
+		protected int _displayedRoutine = 0;
+		public GameObject BtnSelectRoutine = null;
+		public GameObject BtnPrevRoutine = null;
+		public GameObject BtnNextRoutine = null;
+
+		#endregion UI
+
 		#endregion View data
 
 
 
 		#region input
 		protected KeyDebouncer _keys = null;
+
+		protected float _maxDistInteraction = 10.0f;
+
+		protected GameObject _interacttarget = null;
+		protected Highlightable _highlightable = null;
+		protected GameObject _selectedCard = null;
+		protected GameObject _selectedTarget = null;
+
+		// Reference to the plane in front of the camera to hinder the player 
+		// of accidently selecting cards when some input to a UI gadget is required.
+		public GameObject InputWall = null;
 		#endregion input
 
 
@@ -131,6 +186,15 @@ namespace GGJ2016.Routines.Controller {
 
 			//MatchView.SetModel(_match, LevelController.Level);
 
+			//BeginMatch ();
+
+			_mainOptionsVisible = false;
+			OnUIMainOptions ();
+			BtnMainOptionsVisible.SetActive (false);
+			SetVisiblePlayerControls (false);
+			_guessRoutinePlayerVisible = true;
+			OnUITryGuessRoutine ();
+
 		}// Start
 
 		
@@ -145,7 +209,7 @@ namespace GGJ2016.Routines.Controller {
 				BeginMatch ();
 			}// fi
 
-			if (Input.GetKey (KeyCode.Return)){// && _keys.TryPress (KeyCode.Return)) {
+			if (_selectedCard == null && Input.GetKey (KeyCode.Return)){// && _keys.TryPress (KeyCode.Return)) {
 				if (!_camPosBoardActive) {
 					_camPosBoardActive = true;
 					_camPosStashed = _camPosCurrent;
@@ -157,6 +221,120 @@ namespace GGJ2016.Routines.Controller {
 					_camPosBoardActive = false;
 				}// fi
 			}// fi
+
+			// Check if card is targeted.
+			if (_matchRunning){
+				
+				Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+					//Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+				RaycastHit hitinfo;
+
+				//Vector3 hit = Vector3.zero;
+				bool interaction = false;
+				if (Physics.Raycast(ray, out hitinfo, 1<<LayerMask.NameToLayer("Card"))){
+
+					/*
+					if ((hitinfo.collider.gameObject.layer & LayerMask.NameToLayer("Card")) != 0){
+						Debug.Log("Hit card=" + hitinfo.collider.gameObject.name);
+					} else {
+						Debug.Log("Hit noncard with objectname=" + hitinfo.collider.gameObject.name);
+					}// fi
+					*/
+					/*
+					//if (Physics.Raycast(ray, out hitinfo, 100.0f)){
+					hit = hitinfo.point;
+					if (hit.y < MaxDepth)
+						hit.y = MaxDepth;
+					this.transform.position = hit;
+					*/
+
+					if (
+						((hitinfo.collider.gameObject.layer & LayerMask.NameToLayer("Card")) != 0)
+					){
+
+						// Unhighlight previously highlighted object first.
+						if (_interacttarget != null && _interacttarget != hitinfo.collider.gameObject) {
+							if (_highlightable != null){
+								_highlightable.Unhighlight();
+								_highlightable = null;
+							}// fi
+							_interacttarget = null;
+						}// fi
+
+						// Ensure that player can only select cards of own deck.
+						CardView cv = hitinfo.collider.gameObject.GetComponent<CardView> ();
+						if (cv == null && hitinfo.collider.gameObject.name.CompareTo ("Number") == 0) {
+							cv = hitinfo.collider.gameObject.transform.parent.gameObject.GetComponent<CardView> ();
+						}// fi
+						//if (cv == null) {
+						//	DbgOut.LogError ("Failed to get CardView from object=" + hitinfo.collider.gameObject.name);
+						//} else if (cv.CardModel == null){
+						//	DbgOut.LogError ("CardView has null CardModel; object=" + hitinfo.collider.gameObject.name);
+						//}// fi
+
+						if ((cv != null && cv.CardModel != null)
+							&& ((_selectedCard == null && cv.CardModel.Position == _match.PlayerAction)
+								|| (_selectedCard != null && _selectedTarget == null && cv.CardModel.Position == Card.POSITION_BOARD && DoCheckCardFits(cv)))){
+
+							_interacttarget = hitinfo.collider.gameObject;
+							CardView cv2 = _interacttarget.GetComponent<CardView> ();
+							if (cv2 == null && _interacttarget.name.CompareTo ("Number") == 0)
+								_interacttarget = _interacttarget.transform.parent.gameObject;
+
+							_highlightable = _interacttarget.GetComponent<Highlightable>();
+							if (_highlightable != null && _highlightable.enabled){
+								interaction = true;
+								_highlightable.Highlight();
+							}// fi
+						}// fi
+
+					}// fi
+				}// fi
+				if (!interaction) {
+					if (_highlightable != null) {
+						_highlightable.Unhighlight ();
+						_highlightable = null;
+					}// fi
+
+					_interacttarget = null;
+				} else {
+
+					if (Input.GetMouseButtonDown(0)){
+
+						
+						// Check if player selects card.
+						if (_selectedCard == null) {
+							_selectedCard = _interacttarget;
+
+							_camPosStashed = _camPosCurrent;
+							ApplyCamPosition (CamPosBoard, TimeCamFlightBoard);
+
+						} else if (_selectedTarget == null){
+							
+							_selectedTarget = _interacttarget;
+
+							DoPlayCard ();
+						}// fi
+					}// fi
+
+				}// fi
+
+				if (Input.GetMouseButtonDown (1)) {
+					if (_selectedCard != null) {
+						_selectedCard = null;
+
+						ApplyCamPosition (_camPosStashed, TimeCamFlightBoard);
+					}// fi
+				}// fi
+
+			}// fi
+
+
+			#region debug
+			if (Input.GetKeyDown(KeyCode.X) && _keys.TryPress(KeyCode.X)) {
+				EndTurn();
+			}// fi
+			#endregion debug
 		}// LateUpdate
 
 
@@ -181,7 +359,11 @@ namespace GGJ2016.Routines.Controller {
 					cv.transform.rotation = Quaternion.Euler (CardOnBoardRotation);
 					cv.transform.SetParent(ParentBoard.transform, true);
 
+					cv.gameObject.name = "CardBoard_" + col + "_" + row;
+
 					_cardViewsBoard [row] [col] = cv;
+					_cardViewsBoard [row] [col].Column = col;
+					_cardViewsBoard [row] [col].Row = row;
 				}// for
 			}// for
 
@@ -200,6 +382,8 @@ namespace GGJ2016.Routines.Controller {
 					cv.transform.rotation = Quaternion.Euler (CardPlayerHandRotation);// + ParentPlayerHands[p].transform.rotation.eulerAngles);
 					cv.transform.SetParent(ParentPlayerHands[p].transform, false);
 
+					cv.gameObject.name = "CardPlayer_" + p + "_" + pc;
+
 					_cardViewsPerPlayer [p] [pc] = cv;
 				}// for
 			}// for
@@ -209,8 +393,27 @@ namespace GGJ2016.Routines.Controller {
 
 
 
+		protected void CreateRoutines(){
+			int id = 0;
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on yellow or red cards.", ValidateRoutine_YellowRed));
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on yellow or blue cards.", ValidateRoutine_YellowBlue));
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on yellow or green cards.", ValidateRoutine_YellowGreen));
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on red or green cards.", ValidateRoutine_RedGreen));
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on red or blue cards.", ValidateRoutine_RedBlue));
+			_match.AddNewRoutine (new Routine (id++, "You can only place your cards on green or blue cards.", ValidateRoutine_GreenBlue));
+
+			_match.AddNewRoutine (new Routine (id++, "You can only place an even card on an even card and an uneven on an uneven card.", ValidateRoutine_SameOddEven));
+			_match.AddNewRoutine (new Routine (id++, "You can only place an even card on an uneven card and an uneven on an even card.", ValidateRoutine_MixedOddEven));
+
+			_match.AddNewRoutine (new Routine (id++, "You need to place your card besides the last played card.", ValidateRoutine_BesidesLast));
+			_match.AddNewRoutine (new Routine (id++, "You are not allowed to place your card besides the last played card.", ValidateRoutine_NotBesidesLast));
+
+		}// CreateRoutines
+
+
+
 		#region match management
-		protected void BeginMatch(){
+		public void BeginMatch(){
 
 			DbgOut.Log ("Beginning new match.");
 
@@ -239,24 +442,75 @@ namespace GGJ2016.Routines.Controller {
 				forbiddenColors // forbiddenCardColors
 			);
 
+			CreateRoutines ();
+
 			FillBoard ();
 
-			_camPosCurrent = CamPosPlayers [_match.PlayerAction];
-			ApplyCamPosition (_camPosCurrent, TimeCamFlightNextPlayer);
+			DrawPlayerHands ();
 
 			_matchRunning = true;
+
+			PrepareTurn ();
+
+			// Prepare UI.
+			_mainOptionsVisible = true;
+			OnUIMainOptions ();
+			BtnMainOptionsVisible.SetActive (true);
+			_guessRoutinePlayerVisible = true;
+			OnUITryGuessRoutine ();
+			SetVisiblePlayerControls (true);
+			InputWall.SetActive (false);
+
+			SetUIStatusText ("It's your turn, player " + (_match.PlayerAction+1) + ". Select a card!");
 
 		}// BeginMatch
 
 
+		// Prepares a player's turn.
 		protected void PrepareTurn(){
+			DbgOut.Log ("Now it's the turn of player=" + (_match.PlayerAction+1));
+
+			_camPosCurrent = CamPosPlayers [_match.PlayerAction];
+			ApplyCamPosition (_camPosCurrent, TimeCamFlightNextPlayer);
+
+			_selectedCard = null;
+			_selectedTarget = null;
+
+			// Setup the UI.
+			HideAdditionalUI ();
+			SetVisiblePlayerControls (true);
+
 			// TODO
 		}// PrepareTurn
 
 
 
+		// Commits / ends a player's turn.
+		protected void EndTurn(){
+
+			int lastplayer = _match.PlayerAction;
+
+			// Determine the next player.
+			int idxNextPlayer = _match.PlayerAction + 1;
+			if (idxNextPlayer >= _match.PlayerCount)
+				idxNextPlayer = 0;
+			_match.PlayerAction = idxNextPlayer;
+
+			SetUIStatusText ("Player " + (lastplayer+1) + " placed a " + _lastPlayedCard.Color
+				+ " " + _lastPlayedCard.Value + " at " + (_lastBoardColumn+1) + "/" + (_lastBoardRow+1)
+				+ ". Now it's your turn, player " + (_match.PlayerAction+1) + ". Select a card!");
+
+			PrepareTurn ();
+
+			// TODO
+		}// EndTurn
+
+
+
 		protected void EndMatch(){
 			_matchRunning = false;
+
+			SetUIStatusText ("The match is over. The winner is player " + (_match.Winner+1) + "!");
 			// TODO
 		}// EndMatch
 
@@ -264,6 +518,15 @@ namespace GGJ2016.Routines.Controller {
 
 		protected void AbortMatch(){
 			_matchRunning = false;
+
+			for (int p=0; p < _match.PlayerCount; p++){
+				Player player = _match.GetPlayer (p);
+				foreach (Card card in player.Cards) {
+					_match.PlayDeck.ReturnCard (card);
+				}// foreach
+				player.Cards.Clear();
+			}// for
+
 			// TODO
 		}// AbortMatch
 
@@ -301,10 +564,32 @@ namespace GGJ2016.Routines.Controller {
 		protected void FillBoard(){
 			for (int row = 0; row < _match.PlayBoard.Rows; row++){
 				for (int col = 0; col < _match.PlayBoard.Columns; col++) {
-					_cardViewsBoard [row] [col].CardModel = _match.PlayDeck.DrawCard ();
+					Card card = _match.PlayDeck.DrawCard ();
+					_cardViewsBoard [row] [col].CardModel = card;
+					card.Position = Card.POSITION_BOARD;
+					//DbgOut.Log ("Board["+row+"]["+col+"]=" + card.ToString());
 				}// for
 			}// for
 		}// FillBoard
+
+
+
+		protected void DrawPlayerHands(){
+			for (int p = 0; p < ParamPlayerCount; p++) {
+
+				// Note: the initial cards were actually drawn when the player object got created.
+				for (int pc = 0; pc < ParamCardsPerPlayer; pc++) {
+					Card card = _match.GetPlayer (p).Cards [pc]; //_match.PlayDeck.DrawCard ();
+					_cardViewsPerPlayer [p] [pc].CardModel = card;
+					card.Position = p;
+					//DbgOut.Log ("Player=" + p + " card[" + pc + "]=" + card.ToString());
+				}// for
+
+				// Also draw a Routine for the player.
+				_match.GetPlayer(p).Routine = _match.DrawRoutine();
+
+			}// for
+		}// DrawPlayerHands
 
 
 
@@ -339,7 +624,351 @@ namespace GGJ2016.Routines.Controller {
 			Camera.main.transform.rotation = Quaternion.Euler( Vector3.Lerp(_camFlightStartRot, _camFlightTargetRot, share));
 		}// DoCameraFlight
 
+
+		protected void ApplyPlayerHandPresentation(){
+			// TODO
+		}// ApplyPlayerHandPresentation
+
+
+
+		#region UI
+		public void OnUIMainOptions(){
+			_mainOptionsVisible = !_mainOptionsVisible;
+			GameLogo.SetActive(_mainOptionsVisible);
+			BtnInstructions.SetActive(_mainOptionsVisible);
+			BtnBeginNewMatch.SetActive(_mainOptionsVisible);
+			BtnAbout.SetActive(_mainOptionsVisible);
+			TxtLargeText.gameObject.SetActive(false);
+		}// OnUIMainOptions
+
+
+		protected void SetVisiblePlayerControls(bool state){
+			
+			BtnChangeRoutine.SetActive(state
+				&& _match != null && !_match.GetPlayer(_match.PlayerAction).DidChangeRoutine
+				);
+
+			BtnGuessRoutine.SetActive(state);
+			BtnMyRoutine.SetActive(state);
+			BtnAllRoutines.SetActive(state);
+			TxtStatus.gameObject.SetActive(state);
+
+			BtnDrawCard.SetActive(state && _match != null && _match.PlayerMustDraw);
+			TxtInstructDrawCard.gameObject.SetActive(state && _match != null && _match.PlayerMustDraw);
+
+			TxtInstructGuessRoutine.gameObject.SetActive(state && _guessRoutinePlayerVisible);
+			BtnGuess1.SetActive(state && _guessRoutinePlayerVisible);
+			BtnGuess2.SetActive(state && _guessRoutinePlayerVisible);
+
+			BtnGuess3.SetActive(state && _guessRoutinePlayerVisible);
+
+			TxtSingleRoutine.gameObject.SetActive(state && _guessRoutinePlayerVisible);
+
+		}// SetVisiblePlayerControls
+
+		public void OnUIChangeRoutine(){
+			if (!_match.GetPlayer (_match.PlayerAction).DidChangeRoutine) {
+
+				Routine newRoutine = _match.DrawRoutine ();
+				_match.ReturnRoutine (_match.GetPlayer (_match.PlayerAction).Routine);
+				_match.GetPlayer (_match.PlayerAction).Routine = newRoutine;
+
+				_match.GetPlayer (_match.PlayerAction).DidChangeRoutine = true;
+
+				BtnChangeRoutine.SetActive (false);
+
+				SetUIStatusText ("Your Routine has been changed.");
+			}// fi
+		}// OnPlayerChangeRoutine
+
+		public void OnUITryGuessRoutine(){
+			bool guessRoutinePlayerVisible = _guessRoutinePlayerVisible;
+			HideAdditionalUI ();
+
+			_guessRoutinePlayerVisible = !guessRoutinePlayerVisible;
+			_guessRoutineSelectVisible = false;
+
+			InputWall.SetActive (_guessRoutinePlayerVisible);
+
+			TxtInstructGuessRoutine.gameObject.SetActive(_guessRoutinePlayerVisible);
+			BtnGuess1.SetActive(_guessRoutinePlayerVisible);
+			BtnGuess2.SetActive(_guessRoutinePlayerVisible);
+			BtnGuess3.SetActive(_guessRoutinePlayerVisible);
+			if (_guessRoutinePlayerVisible) {
+				int player = 0;
+				UIExtHasText text = BtnGuess1.GetComponent<UIExtHasText> ();
+				if (player == _match.PlayerAction) player++;
+				text.Text.text = "" + (player+1);
+				player++;
+				text = BtnGuess2.GetComponent<UIExtHasText> ();
+				if (player == _match.PlayerAction) player++;
+				text.Text.text = "" + (player+1);
+				player++;
+				text = BtnGuess3.GetComponent<UIExtHasText> ();
+				if (player == _match.PlayerAction) player++;
+				text.Text.text = "" + (player+1);
+			}// fi
+
+			TxtSingleRoutine.gameObject.SetActive(false);
+			BtnSelectRoutine.SetActive(false);
+			BtnPrevRoutine.SetActive(false);
+			BtnNextRoutine.SetActive(false);
+
+		}// OnUITryGuessRoutine
+
+		public void OnUITryGuessRoutine(int option){
+
+			_guessRoutineSelectVisible = true;
+			 
+			_guessPlayerId = -1;
+			UIExtHasText text = null;
+			switch (option) {
+			case 1:
+				text = BtnGuess1.GetComponent<UIExtHasText> ();
+				break;
+			case 2:
+				text = BtnGuess2.GetComponent<UIExtHasText> ();
+				break;
+			default:
+				text = BtnGuess3.GetComponent<UIExtHasText> ();
+				break;
+			}// switch
+			_guessPlayerId = int.Parse (text.Text.text) - 1;
+			_guessRoutine = _match.GetPlayer (_guessPlayerId).Routine;
+
+			_displayedRoutine = 0;
+
+			TxtSingleRoutine.Text.text = _match.AllRoutines[_displayedRoutine].Text;
+			TxtSingleRoutine.gameObject.SetActive(true);
+
+			BtnSelectRoutine.SetActive(true);
+			BtnPrevRoutine.SetActive(true);
+			BtnNextRoutine.SetActive(true);
+		}// OnUITryGuessRoutine(int)
+
+		public void OnUINextRoutine(){
+			_displayedRoutine++;
+			if (_displayedRoutine >= _match.AllRoutines.Count) {
+				_displayedRoutine = 0;
+			}// fi
+			TxtSingleRoutine.Text.text = _match.AllRoutines[_displayedRoutine].Text;
+		}// OnUINextRoutine
+
+		public void OnUIPrevRoutine(){
+			_displayedRoutine--;
+			if (_displayedRoutine <= 0) {
+				_displayedRoutine = _match.AllRoutines.Count - 1;
+			}// fi
+			TxtSingleRoutine.Text.text = _match.AllRoutines[_displayedRoutine].Text;
+		}// OnUIPrevRoutine
+
+		public void OnUISelectRoutine(){
+			OnUITryGuessRoutine ();
+
+			DbgOut.LogWarning ("Not implemented: OnUISelectRoutine.");
+		}// OnUISelectRoutine
+
+		public void OnUIListRoutines(){
+			bool showAllRoutines = _showAllRoutines;
+
+			HideAdditionalUI ();
+
+			_showAllRoutines = !showAllRoutines;
+
+			InputWall.SetActive (_showAllRoutines);
+
+			_displayedRoutine = 0;
+
+			TxtSingleRoutine.Text.text = _match.AllRoutines[_displayedRoutine].Text;
+			TxtSingleRoutine.gameObject.SetActive(_showAllRoutines);
+
+			BtnPrevRoutine.SetActive(_showAllRoutines);
+			BtnNextRoutine.SetActive(_showAllRoutines);
+
+		}// OnUIListRoutines
+
+		public void OnUIDisplayMyRoutine(){
+			bool showMyRoutine = _showMyRoutine;
+
+			HideAdditionalUI ();
+
+			_showMyRoutine = !showMyRoutine;
+
+			InputWall.SetActive (_showMyRoutine);
+
+			TxtSingleRoutine.Text.text = _match.GetPlayer(_match.PlayerAction).Routine.Text;
+			TxtSingleRoutine.gameObject.SetActive(_showMyRoutine);
+
+		}// OnUIListRoutines
+
+		protected void HideAdditionalUI(){
+			_guessRoutinePlayerVisible = false;
+			_guessRoutineSelectVisible = false;
+
+			_showAllRoutines = false;
+
+			_showMyRoutine = false;
+
+			InputWall.SetActive (false);
+
+			TxtInstructGuessRoutine.gameObject.SetActive(false);
+			BtnGuess1.SetActive(false);
+			BtnGuess2.SetActive(false);
+			BtnGuess3.SetActive(false);
+
+			TxtSingleRoutine.gameObject.SetActive(false);
+			BtnSelectRoutine.SetActive(false);
+			BtnPrevRoutine.SetActive(false);
+			BtnNextRoutine.SetActive(false);
+		}// HideAdditionalUI
+
+		protected void SetUIStatusText(string text){
+			TxtStatus.Text.text = text;
+		}// SetUIStatusText
+
+		#endregion UI
+
 		#endregion view management
+
+
+
+		#region rules
+
+		protected bool DoCheckCardFits(CardView cv){
+			//_selectedCard;
+			// TODO
+
+			return true;
+		}// DoCheckCardFits
+
+
+
+		protected void DoPlayCard(){
+
+			DbgOut.Log ("Playing card.");
+
+			CardView cvplayed = _selectedCard.GetComponent<CardView>();
+			CardView cvtarget = _selectedTarget.GetComponent<CardView>();
+
+			// Remember the last played card.
+			_lastPlayedCard = cvplayed.CardModel;
+			_lastBoardColumn = cvtarget.Column;
+			_lastBoardRow = cvtarget.Row;
+
+			// Return card from board to reserve stack.
+			DbgOut.Log ("Returning card to reserve; card=" + cvtarget.CardModel.ToString ());
+			_match.PlayDeck.ReturnCard (cvtarget.CardModel);
+
+			// Place it on the board.
+			cvtarget.CardModel = cvplayed.CardModel;
+			cvtarget.CardModel.Position = Card.POSITION_BOARD;
+			DbgOut.Log ("Placing card on board; removing from player hand; card=" + cvplayed.CardModel.ToString ());
+
+			// Remove card from player hand.
+			Player player = _match.GetPlayer (_match.PlayerAction);
+			player.Cards.Remove (cvplayed.CardModel);
+			cvplayed.CardModel = null;
+			cvplayed.gameObject.SetActive (false);
+			//Renderer rend = cvplayed.gameObject.GetComponent<Renderer> ();
+			//rend.enabled = false;
+
+			if (CheckMatchEnd ()) {
+				EndMatch ();
+			} else {
+				EndTurn ();
+			}// fi
+		}// DoPlayCard
+
+
+
+		// Set winning condition.
+		protected bool CheckMatchEnd(){
+			for (int i = 0; i < _match.PlayerCount; i++) {
+				Player player = _match.GetPlayer (i);
+				if (player.Cards.Count == 0) {
+					_match.Winner = i;
+
+					DbgOut.Log ("Detected match end. Winner is player=" + i);
+
+					return true;
+				}// fi
+			}// for
+			return false;
+		}// CheckMatchEnd
+
+
+
+		#region Routine validators
+		protected bool ValidateRoutine_YellowRed(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Yellow)==0)
+				|| (onboard.Color.CompareTo(CardColor.Red)==0);
+		}// ValidateRoutine_YellowRed
+
+		protected bool ValidateRoutine_YellowBlue(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Yellow)==0)
+				|| (onboard.Color.CompareTo(CardColor.Blue)==0);
+		}// ValidateRoutine_YellowBlue
+
+		protected bool ValidateRoutine_YellowGreen(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Yellow)==0)
+				|| (onboard.Color.CompareTo(CardColor.Green)==0);
+		}// ValidateRoutine_YellowGreen
+
+		protected bool ValidateRoutine_RedGreen(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Red)==0)
+				|| (onboard.Color.CompareTo(CardColor.Green)==0);
+		}// ValidateRoutine_RedGreen
+
+		protected bool ValidateRoutine_RedBlue(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Red)==0)
+				|| (onboard.Color.CompareTo(CardColor.Blue)==0);
+		}// ValidateRoutine_RedBlue
+
+		protected bool ValidateRoutine_GreenBlue(Card played, Card onboard, int column, int row){
+			return (onboard.Color.CompareTo(CardColor.Green)==0)
+				|| (onboard.Color.CompareTo(CardColor.Blue)==0);
+		}// ValidateRoutine_GreenBlue
+
+		protected bool ValidateRoutine_SameOddEven(Card played, Card onboard, int column, int row){
+			return (((played.Value + onboard.Value) % 2) == 0);
+		}// ValidateRoutine_SameOddEven
+
+		protected bool ValidateRoutine_MixedOddEven(Card played, Card onboard, int column, int row){
+			return (((played.Value + onboard.Value) % 2) != 0);
+		}// ValidateRoutine_MixedOddEven
+
+		protected bool ValidateRoutine_BesidesLast(Card played, Card onboard, int column, int row){
+			DbgOut.LogWarning ("Not implemented: ValidateRoutine_BesidesLast");
+			return true;
+		}// ValidateRoutine_BesidesLast
+
+		protected bool ValidateRoutine_NotBesidesLast(Card played, Card onboard, int column, int row){
+			DbgOut.LogWarning ("Not implemented: ValidateRoutine_NotBesidesLast");
+			return true;
+		}// ValidateRoutine_NotBesidesLast
+
+		#endregion Routine validators
+		#endregion rules
+
+
+		#region debug
+
+		protected void DbgOutMatchState(){
+			DbgOut.Log ("Cards held:"
+				+ " p0=" + _match.GetPlayer(0).Cards.Count
+				+ " p1=" + _match.GetPlayer(1).Cards.Count
+				+ " p2=" + _match.GetPlayer(2).Cards.Count
+				+ " p3=" + _match.GetPlayer(3).Cards.Count
+			);
+			for (int p = 0; p < _match.PlayerCount; p++) {
+				DbgOut.Log ("Player=" + p + " has hand:");
+				for (int pc = 0; pc < _match.GetPlayer (p).Cards.Count; pc++)
+					DbgOut.Log (_match.GetPlayer (p).Cards [pc].ToString ());
+			}// for
+		}// DbgOutMatchState
+
+		#endregion debug
+
 			
 
 	}// class

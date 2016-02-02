@@ -4,7 +4,8 @@ using System.Collections.Generic;
 
 using GGJ2016.Routines.Model;
 
-namespace GGJ2016.Routines.Controller {
+namespace GGJ2016.Routines.View {
+
 	public class CardView : MonoBehaviour {
 
 		public Material[] MatColors = null;
@@ -17,10 +18,24 @@ namespace GGJ2016.Routines.Controller {
 			get { return _cardModel; }
 			set {
 				_cardModel = value; 
-				// Force the CardView and CardModel to be in sync.
-				this.SetCardColor(_cardModel.Color);
-				this.SetCardNumber (_cardModel.Value);
+				if (_cardModel != null) {
+					// Force the CardView and CardModel to be in sync.
+					this.SetCardColor (_cardModel.Color);
+					this.SetCardNumber (_cardModel.Value);
+				}// fi
 			}// set
+		}// property
+
+		protected int _column = -1;
+		public int Column {
+			get { return _column; }
+			set { _column = value; }
+		}// property
+
+		protected int _row = -1;
+		public int Row {
+			get { return _row; }
+			set { _row = value; }
 		}// property
 
 

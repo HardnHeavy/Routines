@@ -45,7 +45,7 @@ namespace com.Jireugi.U3DExtension {
 			}// foreach
 
 			foreach (WaitingForKey wait in _waitDone) {
-				DbgOut.Log ("Removing wait.");
+				//DbgOut.Log ("Removing wait.");
 				_waitList.Remove (wait);
 			}// foreach
 			_waitDone.Clear();
