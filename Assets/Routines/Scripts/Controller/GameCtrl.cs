@@ -36,6 +36,8 @@ namespace GGJ2016.Routines.Controller {
 
 		protected bool _matchRunning = false;
 
+		protected bool _startNextRound = false;
+
 		#region Rules
 		protected Card _lastPlayedCard = null;
 		protected Card _lastBoardCard = null;
@@ -79,7 +81,9 @@ namespace GGJ2016.Routines.Controller {
 		// Defines the offset between cards of a player hand.
 		public Vector3 CardPlayerHandOffset = Vector3.one;
 
-		public CardView[][] _cardViewsPerPlayer = null;
+		public int CardsMaxPerRow = 9;
+
+		public List<CardView>[] _cardViewsPerPlayer = null;
 
 
 
@@ -207,6 +211,15 @@ namespace GGJ2016.Routines.Controller {
 		protected void Update () {
 			DoCameraFlight();
 		}// Update
+
+
+
+		protected void FixedUpdate(){
+			if (_startNextRound) {
+				_startNextRound = false;
+				PrepareTurn ();
+			}// fi
+		}// FixedUpdate
 
 
 
@@ -382,29 +395,82 @@ namespace GGJ2016.Routines.Controller {
 				}// for
 			}// for
 
-			_cardViewsPerPlayer = new CardView[ParamPlayerCount][];
+			_cardViewsPerPlayer = new List<CardView>[ParamPlayerCount];
 			for (int p = 0; p < ParamPlayerCount; p++) {
-				_cardViewsPerPlayer[p] = new CardView[ParamCardsPerPlayer];
+				_cardViewsPerPlayer[p] = new List<CardView>();
 				for (int pc = 0; pc < ParamCardsPerPlayer; pc++) {
+
+					AddCardView(p,
+						(CardColor)System.Enum.ToObject (typeof(CardColor), MathHelper.Rand.Next(System.Enum.GetNames (typeof(CardColor)).Length-1)+1),
+						MathHelper.Rand.Next(ParamCardsMaxValue - ParamCardsMinValue) +1 +ParamCardsMinValue);
+					/*
 					CardView cv = SpawnCard (
 						(CardColor)System.Enum.ToObject (typeof(CardColor), MathHelper.Rand.Next(System.Enum.GetNames (typeof(CardColor)).Length-1)+1),
 						MathHelper.Rand.Next(ParamCardsMaxValue - ParamCardsMinValue) +1 +ParamCardsMinValue
 					);
 
+					int row = Mathf.FloorToInt (((float)pc) / ((float)CardsMaxPerRow));
 					cv.transform.position =
 						//ParentPlayerHands[p].transform.position +
-						new Vector3(pc * CardPlayerHandOffset.x, CardPlayerHandOffset.y, CardPlayerHandOffset.z);
+						new Vector3((pc % CardsMaxPerRow)* CardPlayerHandOffset.x, CardPlayerHandOffset.y, row * CardPlayerHandOffset.z);
 					cv.transform.rotation = Quaternion.Euler (CardPlayerHandRotation);// + ParentPlayerHands[p].transform.rotation.eulerAngles);
 					cv.transform.SetParent(ParentPlayerHands[p].transform, false);
 
 					cv.gameObject.name = "CardPlayer_" + p + "_" + pc;
 
-					_cardViewsPerPlayer [p] [pc] = cv;
+					_cardViewsPerPlayer [p].Add(cv);
+					*/
 				}// for
 			}// for
 
 			//AudioHelper.AssignSfx(this.gameObject, ref _asApplause, SfxApplause);
 		}// CreateInfrastructure
+
+
+
+		protected CardView AddCardView(int player, Card card){
+			CardView cv = AddCardView (player, card.Color, card.Value);
+			cv.CardModel = card;
+			cv.CardModel.Position = player;
+			return cv;
+		}// AddCard
+
+
+
+		protected CardView AddCardView(int player, CardColor col, int value){
+			CardView cv = null;
+
+			// Try to find a free one.
+			for (int i = 0; cv == null && i < _cardViewsPerPlayer [player].Count; i++) {
+				if (!_cardViewsPerPlayer [player] [i].gameObject.activeSelf)
+					cv = _cardViewsPerPlayer [player] [i];
+			}// for
+
+			if (cv != null) {
+				cv.SetCardColor (col);
+				cv.SetCardNumber (value);
+				cv.gameObject.SetActive (true);
+			} else {
+				cv = SpawnCard (
+					col,
+					value
+				);
+
+				int count = _cardViewsPerPlayer [player].Count;
+				int row = Mathf.FloorToInt (((float)count) / ((float)CardsMaxPerRow));
+				cv.transform.position =
+					//ParentPlayerHands[p].transform.position +
+					new Vector3 ((count % CardsMaxPerRow) * CardPlayerHandOffset.x, CardPlayerHandOffset.y, row * CardPlayerHandOffset.z);
+				cv.transform.rotation = Quaternion.Euler (CardPlayerHandRotation);// + ParentPlayerHands[p].transform.rotation.eulerAngles);
+				cv.transform.SetParent (ParentPlayerHands [player].transform, false);
+
+				cv.gameObject.name = "CardPlayer_" + player + "_" + count;
+
+				_cardViewsPerPlayer [player].Add (cv);
+			}// fi
+
+			return cv;
+		}// AddCardView
 
 
 
@@ -463,9 +529,13 @@ namespace GGJ2016.Routines.Controller {
 
 			DrawPlayerHands ();
 
+			// The very first played card is the center one.
+			_lastBoardColumn = 1;
+			_lastBoardRow = 1;
+
 			_matchRunning = true;
 
-			PrepareTurn ();
+			//PrepareTurn ();
 
 			// Prepare UI.
 			_mainOptionsVisible = true;
@@ -477,6 +547,8 @@ namespace GGJ2016.Routines.Controller {
 			InputWall.SetActive (false);
 
 			SetUIStatusText ("It's your turn, player " + (_match.PlayerAction+1) + ". Select a card!");
+
+			_startNextRound = true;
 
 		}// BeginMatch
 
@@ -492,6 +564,7 @@ namespace GGJ2016.Routines.Controller {
 			_selectedTarget = null;
 
 			_match.PlayerMustDraw = !CheckPlayerCanPlay ();
+			_match.PlayerDidGuess = false;
 
 			// Setup the UI.
 			HideAdditionalUI ();
@@ -515,7 +588,8 @@ namespace GGJ2016.Routines.Controller {
 				+ " " + _lastPlayedCard.Value + " on a " + _lastBoardCard.Color + " " + _lastBoardCard.Value + " (at " + (_lastBoardColumn+1) + "/" + (_lastBoardRow+1) + ")"
 				+ ". Now it's your turn, player " + (_match.PlayerAction+1) + ". Select a card!");
 
-			PrepareTurn ();
+			//PrepareTurn ();
+			_startNextRound = true;
 
 			// TODO
 		}// EndTurn
@@ -533,6 +607,7 @@ namespace GGJ2016.Routines.Controller {
 
 		protected void AbortMatch(){
 			_matchRunning = false;
+			_startNextRound = false;
 
 			for (int p=0; p < _match.PlayerCount; p++){
 				Player player = _match.GetPlayer (p);
@@ -541,6 +616,8 @@ namespace GGJ2016.Routines.Controller {
 				}// foreach
 				player.Cards.Clear();
 			}// for
+
+			_match.ReturnAllRoutines ();
 
 			// TODO
 		}// AbortMatch
@@ -593,15 +670,18 @@ namespace GGJ2016.Routines.Controller {
 			for (int p = 0; p < ParamPlayerCount; p++) {
 
 				// Note: the initial cards were actually drawn when the player object got created.
-				for (int pc = 0; pc < ParamCardsPerPlayer; pc++) {
+				for (int pc = 0; pc < _match.GetPlayer (p).Cards.Count; pc++) {
 					Card card = _match.GetPlayer (p).Cards [pc]; //_match.PlayDeck.DrawCard ();
 					_cardViewsPerPlayer [p] [pc].CardModel = card;
 					card.Position = p;
+
+					_cardViewsPerPlayer [p] [pc].gameObject.SetActive (true);
 					//DbgOut.Log ("Player=" + p + " card[" + pc + "]=" + card.ToString());
 				}// for
 
 				// Also draw a Routine for the player.
 				_match.GetPlayer(p).Routine = _match.DrawRoutine();
+				DbgOut.Log ("Rule of player=" + (p+1) + ": " + _match.GetPlayer(p).Routine.Text);
 
 			}// for
 		}// DrawPlayerHands
@@ -665,7 +745,7 @@ namespace GGJ2016.Routines.Controller {
 				&& _match != null && !_match.GetPlayer(_match.PlayerAction).DidChangeRoutine
 				);
 
-			BtnGuessRoutine.SetActive(state);
+			BtnGuessRoutine.SetActive(state && !_match.PlayerDidGuess);
 			BtnMyRoutine.SetActive(state);
 			BtnAllRoutines.SetActive(state);
 			TxtStatus.gameObject.SetActive(state);
@@ -688,7 +768,7 @@ namespace GGJ2016.Routines.Controller {
 
 
 		public void OnUIDrawCard(){
-			DbgOut.LogWarning ("Not implemented: OnUIDrawCard");
+			AddCardView (_match.PlayerAction, _match.PlayDeck.DrawCard ());
 		}// OnUIDrawCard
 
 
@@ -805,9 +885,29 @@ namespace GGJ2016.Routines.Controller {
 
 
 		public void OnUISelectRoutine(){
+
+			_match.PlayerDidGuess = true;
+
+			// Hide guessing UI.
 			OnUITryGuessRoutine ();
 
-			DbgOut.LogWarning ("Not implemented: OnUISelectRoutine.");
+			if (_match.AllRoutines[_displayedRoutine].Id == _guessRoutine.Id) {
+				AddCardView(_guessPlayerId, _match.PlayDeck.DrawCard());
+
+				SetUIStatusText ("You guessed correct! Player " + (_guessPlayerId+1) + " had to draw another card. (Routine of player " + (_guessPlayerId+1) + " changed.)");
+			} else {
+				AddCardView (_match.PlayerAction, _match.PlayDeck.DrawCard ());
+
+				SetUIStatusText ("You guessed wrong! You had to draw another card. (Routine of player " + (_guessPlayerId+1) + " changed.)");
+			}// fi
+
+			// The Routine of the guessed player will change in any outcome.
+			Routine newRoutine = _match.DrawRoutine ();
+			_match.ReturnRoutine (_match.GetPlayer (_guessPlayerId).Routine);
+			_match.GetPlayer (_guessPlayerId).Routine = newRoutine;
+
+			// Reset view to have guess button vanish.
+			SetVisiblePlayerControls (true);
 		}// OnUISelectRoutine
 
 
@@ -842,6 +942,16 @@ namespace GGJ2016.Routines.Controller {
 
 			InputWall.SetActive (_showMyRoutine);
 
+			// Debugging.
+			/*
+			if (_match.GetPlayer (_match.PlayerAction).Routine == null)
+				DbgOut.LogError ("Routine of player=" + _match.PlayerAction + " is null.");
+			if (TxtSingleRoutine == null)
+				DbgOut.LogError ("TxtSingleRoutine is null.");
+			else if (TxtSingleRoutine.Text == null)
+				DbgOut.LogError ("TxtSingleRoutine.Text is null.");
+			*/
+
 			TxtSingleRoutine.Text.text = _match.GetPlayer(_match.PlayerAction).Routine.Text;
 			TxtSingleRoutine.gameObject.SetActive(_showMyRoutine);
 
@@ -868,6 +978,7 @@ namespace GGJ2016.Routines.Controller {
 			BtnSelectRoutine.SetActive(false);
 			BtnPrevRoutine.SetActive(false);
 			BtnNextRoutine.SetActive(false);
+
 		}// HideAdditionalUI
 
 
@@ -875,6 +986,74 @@ namespace GGJ2016.Routines.Controller {
 		protected void SetUIStatusText(string text){
 			TxtStatus.Text.text = text;
 		}// SetUIStatusText
+
+
+
+		public void OnUIAbout(){
+			bool hide = TxtLargeText.gameObject.activeSelf;
+			HideAdditionalUI ();
+			TxtLargeText.gameObject.SetActive (!hide);
+			if (!hide) {
+				TxtLargeText.Text.text = "<size=25>(C) 2016 Markus Wellmann and Harry Trautmann\n\n"
+					+ "Lead Game Design: Markus Wellmann\n\n"
+					+ "Additional Game Design and Digital Simulation: Harry Trautmann (http://metacozm.com)\n\n"
+					+ "Special Thanks to Chantal, Sebastian and Anselm for helping in the initial phase!!!\n\n"
+					+ "This game was developed during the Global Game Jam 2016 in Stuttgart/Germany.\n"
+					+ "Find more info here: http://globalgamejam.org/2016/games/routines</size>";
+			}// fi
+		}// OnUIAbout
+
+
+
+		public void OnUIInstructions(){
+			bool hide = TxtLargeText.gameObject.activeSelf;
+			HideAdditionalUI ();
+			TxtLargeText.gameObject.SetActive (!hide);
+			if (!hide) {
+				TxtLargeText.Text.text = "<size=25>"
+					+ "<b>Routines is a card game about guessing the routine of your opponent and trying to get rid of your own cards"
+					+ "in a way so nobody guesses yours.</b>\n\n"
+					+ "Material:\n"
+					+ "1) Playing cards with 4 colors and numbers reaching from 1-10."
+					+ "There are two of each card. All in all there are 80 Cards.\n"
+					+ "2) 10 special Routines cards (see Routines Cards below).\n\n"
+					+ "Setup:\n"
+					+ "1) Every player gets nine random playing cards and one random routine card.\n"
+					+ "2) A grid of 3 x 3 playing cards is placed on the table.\n\n"
+					+ "Main Rules:\n"
+					+ "1) Each turn a player is allowed to lay down one card on another card of the grid. "
+					+ "You can only place a card on another if the number is higher or the same. "
+					+ "There is an exception, if your card has the same color the number does not matter.\n"
+					+ "2) Additionally to these main rules each routine card adds another rule that only applies to the player who holds it. "
+					+ "The other players do not know which routine card it is.\n"
+					+ "3) If a player can’t play a card she has to draw a card from the pile. But the drawn card can instantly be played it if it fits.\n"
+					+ "4) Once each turn a player can try to guess the routine of another player. "
+					+ "If the guess is correct then the player with the guessed routine has to draw another card. "
+					+ "If the guess is wrong, the guesser himself has to draw another card. "
+					+ "In any case the player whose routine card got guessed, will then draw a new routine card. The old one gets put back into the pile of routine cards.\n"
+					+ "5) Every player can change his routine card once in the game, on his turn before playing a card. "
+					+ "The discarded routine card is then put back into the pile of routine cards.\n\n"
+					+ "Start of the Game:\n"
+					+ "1) Initially the centered card on the table is considered the 'last card played'."
+					+ "2) The player turns go in a clockwise manner.\n\n"
+					+ "End of the game:\n"
+					+ "   The player who first get rid of all his cards wins.\n\n"
+					+ "List of all routine cards:\n"
+					+ "1. You can only place your cards on yellow or red cards.\n"
+					+ "2. You can only place your cards on yellow or blue cards.\n"
+					+ "3. You can only place your cards on yellow or green cards.\n"
+					+ "4. You can only place your cards on red or green cards.\n"
+					+ "5. You can only place your cards on red or blue cards.\n"
+					+ "6. You can only place your cards on green or blue cards.\n"
+					+ "7. You can only place an even card on an even card and an uneven card on an uneven card.\n"
+					+ "8. You can only place an even card on an uneven card and an uneven card on an even card.\n"
+					+ "9. You need to place your card besides the last played card."
+					+ "(Examples: 'The player before you placed his card in the very center of the grid. Then you can place your card everywhere except in the very center.' "
+					+ "'The player places his card top left. You now can place your card on only 3 places around the top left.')\n"
+					+ "10. You are not allowed to place your card besides the last played card. (Note: This is the exact opposite of routine 9.)"
+					+ "</size>";
+			}// fi
+		}// OnUIInstructions
 
 		#endregion UI
 

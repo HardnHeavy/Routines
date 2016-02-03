@@ -58,6 +58,13 @@ namespace GGJ2016.Routines.Model {
 			set { _playerMustDraw = value; }
 		}// property
 
+		// true: player tried to guess a routine during the current round; false: the player did not in this round.
+		protected bool _playerDidGuess = false;
+		public bool PlayerDidGuess {
+			get { return _playerDidGuess; }
+			set { _playerDidGuess = value; }
+		}// property
+
 		protected int _winner = -1;
 		public int Winner {
 			get { return _winner; }
@@ -98,6 +105,7 @@ namespace GGJ2016.Routines.Model {
 			_board = new Board (boardrows, boardcolumns);
 
 			_playerMustDraw = false;
+			_playerDidGuess = false;
 
 			_allRoutines = new List<Routine> ();
 			_routinesInReserve = new List<Routine> ();
